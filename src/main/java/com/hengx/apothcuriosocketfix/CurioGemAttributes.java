@@ -81,7 +81,7 @@ public final class CurioGemAttributes {
             return;
         }
         Multimap<Attribute, AttributeModifier> existing = event.getModifiers();
-        if (existing != null) {
+        if (existing != null && !existing.isEmpty()) {
             for (AttributeModifier present : existing.values()) {
                 if (present.getId().equals(modifier.getId())) {
                     return;   // 同 UUID 已经有了:跳过

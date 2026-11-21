@@ -56,6 +56,10 @@ public final class ApothCurioSocketFix {
         if (ModList.get().isLoaded(APOTHEOSIS) && ModList.get().isLoaded(CURIOS)) {
             MinecraftForge.EVENT_BUS.register(CurioGemAttributes.class);
             LOGGER.info("[神化饰品宝石修复] 已启用:Curios 饰品栏物品上的神化宝石属性将正常生效");
+            // 仅诊断用:加 -Dapothcuriosocketfix.selftest=true 才注册,正式游戏不参与
+            if (Boolean.getBoolean("apothcuriosocketfix.selftest")) {
+                SelfTest.register();
+            }
         }
         else {
             LOGGER.info("[神化饰品宝石修复] 未启用:需要同时安装 apotheosis 与 curios");
