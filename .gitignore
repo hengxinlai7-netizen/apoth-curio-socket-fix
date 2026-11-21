@@ -1,0 +1,10 @@
+.gradle/
+build/
+libs/
+run/
+logs/
+*.log
+.idea/
+*.iml
+out/
+mcmodsrepo/
