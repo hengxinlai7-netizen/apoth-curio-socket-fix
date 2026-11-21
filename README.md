@@ -110,22 +110,25 @@ libs/Placebo-1.20.1-8.6.3.jar
 
 ---
 
-## 参考与致谢
+## 来源与致谢
 
-**本模组基于下面两个项目：**
+**本模组最初来源于对下面两个项目的整合与修改**（与它们**没有依赖关系**，装不装都能独立运行）：
 
 - **[Apothic Curios](https://github.com/Daripher/Apothic-Curios)**（作者 Daripher）
-  —— 神化与 Curios 的兼容桥，本模组的实现基础。它证明了「Curios 物品可以拥有神化的词缀与镶孔」，
-  并给出了在 `CurioAttributeModifierEvent` 里补属性的做法；本模组的 `CurioGemAttributes` 就是基于
-  这个思路写的。
+  —— 神化与 Curios 的兼容桥。它证明了「Curios 物品可以拥有神化的词缀与镶孔」，
+  并给出了在 `CurioAttributeModifierEvent` 里补属性的做法；本模组的 `CurioGemAttributes`
+  就是从它整合、改写而来的。
 - **[Apotheosis x Iron's Spellbooks Compat](https://www.curseforge.com/minecraft/mc-mods/apotheosis-x-irons-spellbooks-compat)**
   —— 为铁魔法装备添加神化词缀与宝石的兼容模组。本模组处理 `LootCategory.NONE`、
-  让宝石按分类分发到「非原版装备槽」物品上的做法基于它。
+  让宝石按分类分发到「非原版装备槽」物品上的做法来源于它。
 
 上游项目：
 
 - [Apotheosis](https://www.curseforge.com/minecraft/mc-mods/apotheosis) —— 宝石与镶槽系统
 - [Curios API](https://www.curseforge.com/minecraft/mc-mods/curios) —— 饰品栏与属性事件
+
+**与 Apothic Curios 功能重合**：本模组只修「宝石属性」，覆盖范围更窄；
+若同时安装，建议先确认是否出现属性重复计算。
 
 本模组自身以 MIT 发布；上述项目的代码与素材版权归各自作者所有。
 
