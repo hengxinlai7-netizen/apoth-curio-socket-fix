@@ -1,139 +1,127 @@
-# 神化饰品宝石修复 (apoth-curio-socket-fix)
-
-让 **神化 (Apotheosis)** 镶在 **Curios 饰品栏物品**（戒指 / 项链 / 护符 / 书 …）上的宝石，
-**属性加成正常生效**。
-
-- Minecraft 1.20.1 / Forge 47.2.20
-- 目标版本：Apotheosis 7.4.8、Curios 5.14.1（其它 7.x / 5.x 大概率也可）
-- 协议：MIT
+> [!WARNING]
+> **本仓库已被 [apothiccuriosfix](https://github.com/hengxinlai7-netizen/apothiccuriosfix) 取代，不再维护。**
+> 宝石在饰品栏不生效的问题将在 apothiccuriosfix 里修复。
 
 ---
 
-## 修的是什么问题
-
-Apotheosis 把宝石属性加进物品时走的是原版 `ItemAttributeModifierEvent`
-（`AdventureEvents#affixModifiers`）：
-
-```java
-SocketHelper.getGems(stack).addModifiers(LootCategory.forItem(stack), e.getSlotType(), consumer);
-```
-
-而 `GemInstance#addModifiers(EquipmentSlot slot, ...)` 内部有一段**槽位过滤**：
-
-```java
-for (EquipmentSlot itemSlot : this.cat.getSlots()) {
-    if (itemSlot != slot) continue;      // 宝石分类的槽位 != 当前查询槽位 → 一条都不加
-    ...addModifiers...
-}
-```
-
-戒指、项链、护符这类 Curios 物品，`LootCategory.forItem(stack)` 得到的是 **`NONE`**，
-而 `NONE.getSlots()` 是**空数组** —— 这个循环一次都不会命中。
-
-结果：宝石能镶上去、`GemInstance#isValid()` 也是 `true`，但**属性一条都加不上**。
-放进原版头盔/胸甲/剑里则一切正常，因为那些物品的分类里带着 `HEAD` / `CHEST` / `MAINHAND`。
-
-## 怎么修的
-
-Curios 有自己的 `CurioAttributeModifierEvent`：饰品栏物品计算属性修饰符时触发。
-本模组监听它，对每颗宝石**跳过上面那段槽位过滤**，直接调用过滤之后真正干活的那一步：
-
-```java
-gem.getBonus(cat, rarity).ifPresent(bonus ->
-    bonus.addModifiers(gemStack, rarity, event::addModifier));
-```
-
-除了"槽位过滤"，所有判定（`LootCategory`、`LootRarity`、`isValid()` 的 bonus 存在性）
-都沿用 Apotheosis 自己的逻辑，所以不会给本来该被过滤掉的宝石凭空加属性 ——
-只有"没有原版槽位"的 Curios 物品受影响。
-
-同一 UUID 的修饰符只会加一次（宝石的 UUID 写在宝石 NBT 里，重复计算会让属性翻倍）。
-
----
-
-## 生效条件
-
-| 装了 Curios | 装了 Apotheosis | 行为 |
-|:---:|:---:|---|
-| ✅ | ✅ | 饰品栏物品上的宝石属性生效 |
-| ✅ | ❌ | 什么也不做（日志一行提示） |
-| ❌ | ✅ | 什么也不做（日志一行提示） |
-| ❌ | ❌ | 什么也不做，不会崩 |
-
-`curios` 与 `apotheosis` 在 `mods.toml` 里都是 `mandatory=false`（软依赖）：
-**不会**因为缺前置而拒绝加载，也不会提前加载任何前置的类（注册前用 `ModList.isLoaded` 守过）。
-
----
-
-## 目前**没有**覆盖的部分
-
-**只修了"属性加成"。** 宝石的触发式效果都还没有接：
-
-- `doPostAttack` / `doPostHurt` / `onHurt`（命中、受击时的触发效果）
-- `onArrowFired` / `onArrowImpact`（弓箭）
-- `getDurabilityBonusPercentage`（耐久加成）
-- `getDamageProtection` / `getDamageBonus` / `onShieldBlock` / `onBlockBreak` / `onItemUse`
-- 宝石的附魔等级加成（`getEnchantmentLevels`）
-
-也就是说：**属性类宝石（如 +攻击力、+生命上限、+暴击率）会生效；
-纯触发型的宝石在饰品栏里仍然不会触发。** 这些要等后续版本。
-
----
-
-## 安装
-
-1. 装好 Minecraft 1.20.1 + Forge 47.2.20（或更高 47.x）
-2. 把 `apothcuriosocketfix-1.0.0.jar` 放进 `mods/`
-3. 同时需要 `Apotheosis` 与其前置 `Placebo`；要生效还需要 `Curios`
-
-服务端 / 客户端都要装（这是纯服务端逻辑的修复，但 Curios 的饰品位本身是双端的）。
-
----
-
-## 从源码构建
-
-```bash
-# 需要 JDK 17+ 与 ForgeGradle 6
-./gradlew build
-# 产物:build/libs/apothcuriosocketfix-1.0.0.jar
-```
-
-编译期依赖不打进 jar，需要把它们放进项目根目录的 `libs/`（该目录已被 `.gitignore` 忽略）：
-
-```
-libs/curios-forge-5.14.1+1.20.1.jar
-libs/Apotheosis-1.20.1-7.4.8.jar
-libs/Placebo-1.20.1-8.6.3.jar
-```
-
-`build.gradle` 用 `fileTree(dir: 'libs', include: ['*.jar'])` 收集，换版本只需换文件。
-
----
-
-## 来源与致谢
-
-**本模组最初来源于对下面两个项目的整合与修改**（与它们**没有依赖关系**，装不装都能独立运行）：
-
-- **[Apothic Curios](https://github.com/Daripher/Apothic-Curios)**（作者 Daripher）
-  —— 神化与 Curios 的兼容桥。它证明了「Curios 物品可以拥有神化的词缀与镶孔」，
-  并给出了在 `CurioAttributeModifierEvent` 里补属性的做法；本模组的 `CurioGemAttributes`
-  就是从它整合、改写而来的。
-- **[Apotheosis x Iron's Spellbooks Compat](https://www.curseforge.com/minecraft/mc-mods/apotheosis-x-irons-spellbooks-compat)**
-  —— 为铁魔法装备添加神化词缀与宝石的兼容模组。本模组处理 `LootCategory.NONE`、
-  让宝石按分类分发到「非原版装备槽」物品上的做法来源于它。
-
-上游项目：
-
-- [Apotheosis](https://www.curseforge.com/minecraft/mc-mods/apotheosis) —— 宝石与镶槽系统
-- [Curios API](https://www.curseforge.com/minecraft/mc-mods/curios) —— 饰品栏与属性事件
-
-**与 Apothic Curios 功能重合**：本模组只修「宝石属性」，覆盖范围更窄；
-若同时安装，建议先确认是否出现属性重复计算。
-
-本模组自身以 MIT 发布；上述项目的代码与素材版权归各自作者所有。
-
----
-
-## 协议
-
-[MIT](LICENSE) © 2026 hengxinlai7-netizen
+IyDnpZ7ljJbppbDlk4Hlrp3nn7Pkv67lpI0gKGFwb3RoLWN1cmlvLXNvY2tl
+dC1maXgpCgrorqkgKirnpZ7ljJYgKEFwb3RoZW9zaXMpKiog6ZW25ZyoICoq
+Q3VyaW9zIOmlsOWTgeagj+eJqeWTgSoq77yI5oiS5oyHIC8g6aG56ZO+IC8g
+5oqk56ymIC8g5LmmIOKApu+8ieS4iueahOWuneefs++8jAoqKuWxnuaAp+WK
+oOaIkOato+W4uOeUn+aViCoq44CCCgotIE1pbmVjcmFmdCAxLjIwLjEgLyBG
+b3JnZSA0Ny4yLjIwCi0g55uu5qCH54mI5pys77yaQXBvdGhlb3NpcyA3LjQu
+OOOAgUN1cmlvcyA1LjE0LjHvvIjlhbblroMgNy54IC8gNS54IOWkp+amgueO
+h+S5n+WPr++8iQotIOWNj+iuru+8mk1JVAoKLS0tCgojIyDkv67nmoTmmK/k
+u4DkuYjpl67popgKCkFwb3RoZW9zaXMg5oqK5a6d55+z5bGe5oCn5Yqg6L+b
+54mp5ZOB5pe26LWw55qE5piv5Y6f54mIIGBJdGVtQXR0cmlidXRlTW9kaWZp
+ZXJFdmVudGAK77yIYEFkdmVudHVyZUV2ZW50cyNhZmZpeE1vZGlmaWVyc2Dv
+vInvvJoKCmBgYGphdmEKU29ja2V0SGVscGVyLmdldEdlbXMoc3RhY2spLmFk
+ZE1vZGlmaWVycyhMb290Q2F0ZWdvcnkuZm9ySXRlbShzdGFjayksIGUuZ2V0
+U2xvdFR5cGUoKSwgY29uc3VtZXIpOwpgYGAKCuiAjCBgR2VtSW5zdGFuY2Uj
+YWRkTW9kaWZpZXJzKEVxdWlwbWVudFNsb3Qgc2xvdCwgLi4uKWAg5YaF6YOo
+5pyJ5LiA5q61Kirmp73kvY3ov4fmu6QqKu+8mgoKYGBgamF2YQpmb3IgKEVx
+dWlwbWVudFNsb3QgaXRlbVNsb3QgOiB0aGlzLmNhdC5nZXRTbG90cygpKSB7
+CiAgICBpZiAoaXRlbVNsb3QgIT0gc2xvdCkgY29udGludWU7ICAgICAgLy8g
+5a6d55+z5YiG57G755qE5qe95L2NICE9IOW9k+WJjeafpeivouanveS9jSDi
+hpIg5LiA5p2h6YO95LiN5YqgCiAgICAuLi5hZGRNb2RpZmllcnMuLi4KfQpg
+YGAKCuaIkuaMh+OAgemhuemTvuOAgeaKpOespui/meexuyBDdXJpb3Mg54mp
+5ZOB77yMYExvb3RDYXRlZ29yeS5mb3JJdGVtKHN0YWNrKWAg5b6X5Yiw55qE
+5pivICoqYE5PTkVgKirvvIwK6ICMIGBOT05FLmdldFNsb3RzKClgIOaYryoq
+56m65pWw57uEKiog4oCU4oCUIOi/meS4quW+queOr+S4gOasoemDveS4jeS8
+muWRveS4reOAggoK57uT5p6c77ya5a6d55+z6IO96ZW25LiK5Y6744CBYEdl
+bUluc3RhbmNlI2lzVmFsaWQoKWAg5Lmf5pivIGB0cnVlYO+8jOS9hioq5bGe
+5oCn5LiA5p2h6YO95Yqg5LiN5LiKKirjgIIK5pS+6L+b5Y6f54mI5aS055uU
+L+iDuOeUsi/liZHph4zliJnkuIDliIfmraPluLjvvIzlm6DkuLrpgqPkupvn
+ianlk4HnmoTliIbnsbvph4zluKbnnYAgYEhFQURgIC8gYENIRVNUYCAvIGBN
+QUlOSEFORGDjgIIKCiMjIOaAjuS5iOS/rueahAoKQ3VyaW9zIOacieiHquW3
+seeahCBgQ3VyaW9BdHRyaWJ1dGVNb2RpZmllckV2ZW50YO+8mumlsOWTgeag
+j+eJqeWTgeiuoeeul+WxnuaAp+S/rumlsOespuaXtuinpuWPkeOAggrmnKzm
+qKHnu4Tnm5HlkKzlroPvvIzlr7nmr4/popflrp3nn7MqKui3s+i/h+S4iumd
+oumCo+auteanveS9jei/h+a7pCoq77yM55u05o6l6LCD55So6L+H5ruk5LmL
+5ZCO55yf5q2j5bmy5rS755qE6YKj5LiA5q2l77yaCgpgYGBqYXZhCmdlbS5n
+ZXRCb251cyhjYXQsIHJhcml0eSkuaWZQcmVzZW50KGJvbnVzIC0+CiAgICBi
+b251cy5hZGRNb2RpZmllcnMoZ2VtU3RhY2ssIHJhcml0eSwgZXZlbnQ6OmFk
+ZE1vZGlmaWVyKSk7CmBgYAoK6Zmk5LqGIuanveS9jei/h+a7pCLvvIzmiYDm
+nInliKTlrprvvIhgTG9vdENhdGVnb3J5YOOAgWBMb290UmFyaXR5YOOAgWBp
+c1ZhbGlkKClgIOeahCBib251cyDlrZjlnKjmgKfvvIkK6YO95rK/55SoIEFw
+b3RoZW9zaXMg6Ieq5bex55qE6YC76L6R77yM5omA5Lul5LiN5Lya57uZ5pys
+5p2l6K+l6KKr6L+H5ruk5o6J55qE5a6d55+z5Yet56m65Yqg5bGe5oCnIOKA
+lOKAlArlj6rmnIki5rKh5pyJ5Y6f54mI5qe95L2NIueahCBDdXJpb3Mg54mp
+5ZOB5Y+X5b2x5ZON44CCCgrlkIzkuIAgVVVJRCDnmoTkv67ppbDnrKblj6rk
+vJrliqDkuIDmrKHvvIjlrp3nn7PnmoQgVVVJRCDlhpnlnKjlrp3nn7MgTkJU
+IOmHjO+8jOmHjeWkjeiuoeeul+S8muiuqeWxnuaAp+e/u+WAje+8ieOAggoK
+LS0tCgojIyDnlJ/mlYjmnaHku7YKCnwg6KOF5LqGIEN1cmlvcyB8IOijheS6
+hiBBcG90aGVvc2lzIHwg6KGM5Li6IHwKfDotLS06fDotLS06fC0tLXwKfCDi
+nIUgfCDinIUgfCDppbDlk4HmoI/nianlk4HkuIrnmoTlrp3nn7PlsZ7mgKfn
+lJ/mlYggfAp8IOKchSB8IOKdjCB8IOS7gOS5iOS5n+S4jeWBmu+8iOaXpeW/
+l+S4gOihjOaPkOekuu+8iSB8Cnwg4p2MIHwg4pyFIHwg5LuA5LmI5Lmf5LiN
+5YGa77yI5pel5b+X5LiA6KGM5o+Q56S677yJIHwKfCDinYwgfCDinYwgfCDk
+u4DkuYjkuZ/kuI3lgZrvvIzkuI3kvJrltKkgfAoKYGN1cmlvc2Ag5LiOIGBh
+cG90aGVvc2lzYCDlnKggYG1vZHMudG9tbGAg6YeM6YO95pivIGBtYW5kYXRv
+cnk9ZmFsc2Vg77yI6L2v5L6d6LWW77yJ77yaCioq5LiN5LyaKirlm6DkuLrn
+vLrliY3nva7ogIzmi5Lnu53liqDovb3vvIzkuZ/kuI3kvJrmj5DliY3liqDo
+vb3ku7vkvZXliY3nva7nmoTnsbvvvIjms6jlhozliY3nlKggYE1vZExpc3Qu
+aXNMb2FkZWRgIOWuiOi/h++8ieOAggoKLS0tCgojIyDnm67liY0qKuayoeac
+iSoq6KaG55uW55qE6YOo5YiGCgoqKuWPquS/ruS6hiLlsZ7mgKfliqDmiJAi
+44CCKiog5a6d55+z55qE6Kem5Y+R5byP5pWI5p6c6YO96L+Y5rKh5pyJ5o6l
+77yaCgotIGBkb1Bvc3RBdHRhY2tgIC8gYGRvUG9zdEh1cnRgIC8gYG9uSHVy
+dGDvvIjlkb3kuK3jgIHlj5flh7vml7bnmoTop6blj5HmlYjmnpzvvIkKLSBg
+b25BcnJvd0ZpcmVkYCAvIGBvbkFycm93SW1wYWN0YO+8iOW8k+eure+8iQot
+IGBnZXREdXJhYmlsaXR5Qm9udXNQZXJjZW50YWdlYO+8iOiAkOS5heWKoOaI
+kO+8iQotIGBnZXREYW1hZ2VQcm90ZWN0aW9uYCAvIGBnZXREYW1hZ2VCb251
+c2AgLyBgb25TaGllbGRCbG9ja2AgLyBgb25CbG9ja0JyZWFrYCAvIGBvbkl0
+ZW1Vc2VgCi0g5a6d55+z55qE6ZmE6a2U562J57qn5Yqg5oiQ77yIYGdldEVu
+Y2hhbnRtZW50TGV2ZWxzYO+8iQoK5Lmf5bCx5piv6K+077yaKirlsZ7mgKfn
+sbvlrp3nn7PvvIjlpoIgK+aUu+WHu+WKm+OAgSvnlJ/lkb3kuIrpmZDjgIEr
+5pq05Ye7546H77yJ5Lya55Sf5pWI77ybCue6r+inpuWPkeWei+eahOWuneef
+s+WcqOmlsOWTgeagj+mHjOS7jeeEtuS4jeS8muinpuWPkeOAgioqIOi/meS6
+m+imgeetieWQjue7reeJiOacrOOAggoKLS0tCgojIyDlronoo4UKCjEuIOij
+heWlvSBNaW5lY3JhZnQgMS4yMC4xICsgRm9yZ2UgNDcuMi4yMO+8iOaIluab
+tOmrmCA0Ny5477yJCjIuIOaKiiBgYXBvdGhjdXJpb3NvY2tldGZpeC0xLjAu
+MC5qYXJgIOaUvui/myBgbW9kcy9gCjMuIOWQjOaXtumcgOimgSBgQXBvdGhl
+b3Npc2Ag5LiO5YW25YmN572uIGBQbGFjZWJvYO+8m+imgeeUn+aViOi/mOmc
+gOimgSBgQ3VyaW9zYAoK5pyN5Yqh56uvIC8g5a6i5oi356uv6YO96KaB6KOF
+77yI6L+Z5piv57qv5pyN5Yqh56uv6YC76L6R55qE5L+u5aSN77yM5L2GIEN1
+cmlvcyDnmoTppbDlk4HkvY3mnKzouqvmmK/lj4znq6/nmoTvvInjgIIKCi0t
+LQoKIyMg5LuO5rqQ56CB5p6E5bu6CgpgYGBiYXNoCiMg6ZyA6KaBIEpESyAx
+Nysg5LiOIEZvcmdlR3JhZGxlIDYKLi9ncmFkbGV3IGJ1aWxkCiMg5Lqn54mp
+OmJ1aWxkL2xpYnMvYXBvdGhjdXJpb3NvY2tldGZpeC0xLjAuMC5qYXIKYGBg
+CgrnvJbor5HmnJ/kvp3otZbkuI3miZPov5sgamFy77yM6ZyA6KaB5oqK5a6D
+5Lus5pS+6L+b6aG555uu5qC555uu5b2V55qEIGBsaWJzL2DvvIjor6Xnm67l
+vZXlt7LooqsgYC5naXRpZ25vcmVgIOW/veeVpe+8ie+8mgoKYGBgCmxpYnMv
+Y3VyaW9zLWZvcmdlLTUuMTQuMSsxLjIwLjEuamFyCmxpYnMvQXBvdGhlb3Np
+cy0xLjIwLjEtNy40LjguamFyCmxpYnMvUGxhY2Viby0xLjIwLjEtOC42LjMu
+amFyCmBgYAoKYGJ1aWxkLmdyYWRsZWAg55SoIGBmaWxlVHJlZShkaXI6ICds
+aWJzJywgaW5jbHVkZTogWycqLmphciddKWAg5pS26ZuG77yM5o2i54mI5pys
+5Y+q6ZyA5o2i5paH5Lu244CCCgotLS0KCiMjIOadpea6kOS4juiHtOiwogoK
+KirmnKzmqKHnu4TmnIDliJ3mnaXmupDkuo7lr7nkuIvpnaLkuKTkuKrpobnn
+m67nmoTmlbTlkIjkuI7kv67mlLkqKu+8iOS4juWug+S7rCoq5rKh5pyJ5L6d
+6LWW5YWz57O7KirvvIzoo4XkuI3oo4Xpg73og73ni6znq4vov5DooYzvvInv
+vJoKCi0gKipbQXBvdGhpYyBDdXJpb3NdKGh0dHBzOi8vZ2l0aHViLmNvbS9E
+YXJpcGhlci9BcG90aGljLUN1cmlvcykqKu+8iOS9nOiAhSBEYXJpcGhlcu+8
+iQogIOKAlOKAlCDnpZ7ljJbkuI4gQ3VyaW9zIOeahOWFvOWuueahpeOAguWu
+g+ivgeaYjuS6huOAjEN1cmlvcyDnianlk4Hlj6/ku6Xmi6XmnInnpZ7ljJbn
+moTor43nvIDkuI7plbblrZTjgI3vvIwKICDlubbnu5nlh7rkuoblnKggYEN1
+cmlvQXR0cmlidXRlTW9kaWZpZXJFdmVudGAg6YeM6KGl5bGe5oCn55qE5YGa
+5rOV77yb5pys5qih57uE55qEIGBDdXJpb0dlbUF0dHJpYnV0ZXNgCiAg5bCx
+5piv5LuO5a6D5pW05ZCI44CB5pS55YaZ6ICM5p2l55qE44CCCi0gKipbQXBv
+dGhlb3NpcyB4IElyb24ncyBTcGVsbGJvb2tzIENvbXBhdF0oaHR0cHM6Ly93
+d3cuY3Vyc2Vmb3JnZS5jb20vbWluZWNyYWZ0L21jLW1vZHMvYXBvdGhlb3Np
+cy14LWlyb25zLXNwZWxsYm9va3MtY29tcGF0KSoqCiAg4oCU4oCUIOS4uumT
+gemtlOazleijheWkh+a3u+WKoOelnuWMluivjee8gOS4juWuneefs+eahOWF
+vOWuueaooee7hOOAguacrOaooee7hOWkhOeQhiBgTG9vdENhdGVnb3J5Lk5P
+TkVg44CBCiAg6K6p5a6d55+z5oyJ5YiG57G75YiG5Y+R5Yiw44CM6Z2e5Y6f
+54mI6KOF5aSH5qe944CN54mp5ZOB5LiK55qE5YGa5rOV5p2l5rqQ5LqO5a6D
+44CCCgrkuIrmuLjpobnnm67vvJoKCi0gW0Fwb3RoZW9zaXNdKGh0dHBzOi8v
+d3d3LmN1cnNlZm9yZ2UuY29tL21pbmVjcmFmdC9tYy1tb2RzL2Fwb3RoZW9z
+aXMpIOKAlOKAlCDlrp3nn7PkuI7plbbmp73ns7vnu58KLSBbQ3VyaW9zIEFQ
+SV0oaHR0cHM6Ly93d3cuY3Vyc2Vmb3JnZS5jb20vbWluZWNyYWZ0L21jLW1v
+ZHMvY3VyaW9zKSDigJTigJQg6aWw5ZOB5qCP5LiO5bGe5oCn5LqL5Lu2Cgoq
+KuS4jiBBcG90aGljIEN1cmlvcyDlip/og73ph43lkIgqKu+8muacrOaooee7
+hOWPquS/ruOAjOWuneefs+WxnuaAp+OAje+8jOimhuebluiMg+WbtOabtOeq
+hO+8mwroi6XlkIzml7blronoo4XvvIzlu7rorq7lhYjnoa7orqTmmK/lkKbl
+h7rnjrDlsZ7mgKfph43lpI3orqHnrpfjgIIKCuacrOaooee7hOiHqui6q+S7
+pSBNSVQg5Y+R5biD77yb5LiK6L+w6aG555uu55qE5Luj56CB5LiO57Sg5p2Q
+54mI5p2D5b2S5ZCE6Ieq5L2c6ICF5omA5pyJ44CCCgotLS0KCiMjIOWNj+iu
+rgoKW01JVF0oTElDRU5TRSkgwqkgMjAyNiBoZW5neGlubGFpNy1uZXRpemVu
+Cg==
